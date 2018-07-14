@@ -45,6 +45,8 @@
 #include "py/builtin.h"
 #include "py/mphal.h"
 
+#define SOCKET_POLL_US (100000)
+
 /*
   The idea of this module is to implement reasonable minimum of
   socket-related functions to write typical clients and servers.
@@ -249,6 +251,31 @@ STATIC mp_obj_t socket_send(size_t n_args, const mp_obj_t *args) {
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(socket_send_obj, 2, 3, socket_send);
 
+STATIC mp_obj_t socket_settimeout(mp_obj_t self_in , mp_obj_t timeout_in) {
+
+    mp_obj_socket_t *self = MP_OBJ_TO_PTR(self_in);
+    uint64_t timeout_ms = UINT64_MAX;
+    
+#if MICROPY_PY_BUILTINS_FLOAT
+    timeout_ms = mp_obj_get_float(timeout_in) * 1000L;
+#else
+    timeout_ms = mp_obj_get_int(timeout_in) * 1000;
+#endif
+
+
+    struct timeval timeout = {
+        .tv_sec = timeout_ms / 1000,
+        .tv_usec = (timeout_ms % 1000) * 1000
+    };
+
+    int r = setsockopt(self->fd, SOL_SOCKET, SO_SNDTIMEO, (const void *)&timeout, sizeof(timeout));
+    RAISE_ERRNO(r, errno);
+    r = setsockopt(self->fd, SOL_SOCKET, SO_RCVTIMEO, (const void *)&timeout, sizeof(timeout));
+    RAISE_ERRNO(r, errno);
+    return mp_const_none;
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_2(socket_settimeout_obj, socket_settimeout);
+
 STATIC mp_obj_t socket_sendto(size_t n_args, const mp_obj_t *args) {
     mp_obj_socket_t *self = MP_OBJ_TO_PTR(args[0]);
     int flags = 0;
@@ -362,6 +389,7 @@ STATIC const mp_rom_map_elem_t usocket_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_accept), MP_ROM_PTR(&socket_accept_obj) },
     { MP_ROM_QSTR(MP_QSTR_recv), MP_ROM_PTR(&socket_recv_obj) },
     { MP_ROM_QSTR(MP_QSTR_recvfrom), MP_ROM_PTR(&socket_recvfrom_obj) },
+    { MP_ROM_QSTR(MP_QSTR_settimeout), MP_ROM_PTR(&socket_settimeout_obj) },
     { MP_ROM_QSTR(MP_QSTR_send), MP_ROM_PTR(&socket_send_obj) },
     { MP_ROM_QSTR(MP_QSTR_sendto), MP_ROM_PTR(&socket_sendto_obj) },
     { MP_ROM_QSTR(MP_QSTR_setsockopt), MP_ROM_PTR(&socket_setsockopt_obj) },
